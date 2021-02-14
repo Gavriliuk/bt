@@ -1,0 +1,290 @@
+#!/bin/bash
+
+################################################################################
+# This script downloads one crashreport from rdkbacktrace
+
+# Usage:
+# $ bt-rep <object-id> [ <path-to-store-crashreport> ]
+
+# <object-id> is a 8-digit hexadecimal number identfying the crashreport
+# The directory named <object-id> is being created in the specified path
+# or in the current directory (if the path is not specified)
+
+# The script internally uses such tools as 'morgue' and 'jq'
+
+# The following command has to be run once before using 'bt-rep'
+# $ morgue login -k https://rdkbacktrace.stb.r53.xcal.tv
+
+################################################################################
+# morgue usage examples:
+
+# 0. Get version
+# $ morgue -v
+# 1.20.1
+
+# 1. Log in to server
+# $ morgue login -k https://rdkbacktrace.stb.r53.xcal.tv
+# Logged in [09788e8d65279b18dffe82397921fc69]
+
+# 2. Download minidump
+# $ morgue get rdk -k 16a258e6
+# Wrote 396056 bytes to 16a258e6.dmp
+
+# 3. Download JSON
+#
+# - old style
+# $ morgue get rdk -k 16a258e6 --resource=json.gz -o 16a258e6.json.gz
+#
+# - new style
+# $ morgue get rdk -k 2cafe40e --resource=json.gz -o 2cafe40e.json
+# Wrote 1806646 bytes to 2cafe40e.json
+# Fetched 1 of 1 objects.
+
+# 4. List attachments
+# $ morgue attachment list rdk -k 2cafe40e
+# rdk obj 2cafe40e attachments:
+#   id 2a5ad851 name "attachments.zip" size 293839 type "application/zip"
+
+# 5. Download attachment
+# $ morgue attachment get rdk -k 2cafe40e --attachment-id=2a5ad851
+# Wrote 293839 bytes to attachments.zip
+
+# Documentation is available at:
+# https://github.com/backtrace-labs/backtrace-morgue#readme
+
+################################################################################
+# jq - commandline JSON processor [version 1.6]
+
+# Usage: jq [options] <jq filter> [file...]
+#        jq [options] --args <jq filter> [strings...]
+#        jq [options] --jsonargs <jq filter> [JSON_TEXTS...]
+
+# jq is a tool for processing JSON inputs, applying the given filter to its JSON text inputs
+# and producing the filter's results as JSON on standard output.
+
+# See the jq(1) manpage ("man jq") and/or https://stedolan.github.io/jq
+
+################################################################################
+# Set environment
+#BTREP_DEBUG=1
+#BTREP_DEBUG_THREADS=1
+
+#BTREP_SAVE_ATTRS=1
+#BTREP_SAVE_THREADS=1
+#BTREP_SAVE_EACH_STACK=1
+
+#BTREP_PARSE_MAIN_THREAD=1
+#BTREP_PARSE_ALL_THREADS=1
+
+[ -n "$BTREP_DEBUG" ] && echo 'Debug mode'
+
+################################################################################
+# Set oid (object Id)
+[ -z "$1" ] && echo "Error: object Id is not specified" && exit
+oid="$1"
+
+################################################################################
+# Go to work directory
+unset dir
+if [ $(basename "$PWD") != "$oid" ]; then
+    [ -z "$2" ] && dir='.' || dir="$2"
+    if [ -d "$dir" ]; then
+        [ -w "$dir" ] || !echo "Error: '$dir' is not writable" || exit
+    else
+        mkdir -p "$dir" || !echo "Error: can't create directory '$dir'" || exit
+    fi
+
+    dir="$(readlink -m "$dir/$oid")"
+    mkdir -p "$dir" || !echo "Error: can't create directory '$dir'" || exit
+
+    cd $dir || exit
+fi
+
+################################################################################
+# Delete old files
+[ -n "$BTREP_DEBUG" ] && ls -- * > /dev/null 2> /dev/null && echo 'Delete old files' && rm -rf -- *
+
+################################################################################
+# Download minidump
+[ -n "$BTREP_DEBUG" ] && echo "Get $oid.dmp"
+fingerprint=$(morgue get rdk -k --debug "$oid" 2>&1 | grep "fingerprint" | cut -d ':' -f 2 | cut -d '"' -f 2)
+if [ -f "$oid.dmp" ]; then
+    mv "$oid.dmp" 'report.dmp'
+else
+    [ -n "$dir" ] && rmdir "$dir"
+    exit
+fi
+url="https://rdkbacktrace.stb.r53.xcal.tv/p/rdk/debug?time=month&fingerprint=$fingerprint&debug=(%22$oid%22,0,0)"
+echo $url
+
+################################################################################
+# Download JSON
+[ -n "$BTREP_DEBUG" ] && echo "Get report.json"
+morgue get rdk -k "$oid" --resource=json.gz -o report.json || exit
+
+################################################################################
+# Parse JSON and create report.txt (CrashPortal style)
+json='report.json'
+if [ -f "$json" ]; then
+    [ -n "$BTREP_DEBUG" ] && echo "Parse $oid.json"
+    vls='report.values'
+    txt='report.txt'
+    rm -f $vls $txt
+
+    # Extract attributes
+    attrs=$(mktemp --tmpdir rbt-a.XXXXXX)
+    jq '.attributes' "$json" > "$attrs"
+    [ -n "$BTREP_DEBUG" ] && echo "Attributes: '$attrs'"
+    [ -n "$BTREP_SAVE_ATTRS" ] && echo "Save attributes as 'saved_attrs.json'" && cp "$attrs" "saved_attrs.json"
+
+    # Find signal name
+    error=$(jq -r '.["error.message"]' "$attrs")
+    [ -n "$BTREP_DEBUG" ] && echo "Error message: '$error'"
+    if [[ "$error" == 'SIG*' ]]; then
+        signal="${error%% *}"
+    else
+        classifier=$(jq -r '.classifiers[0]' "$json")
+        if [ "$classifier" = 'error' ]; then signal='SIGABRT'
+        elif [ "$classifier" = 'user-defined-signal' ]; then signal='SIGUSR1'
+        else signal="SIG${classifier^^}"; fi
+    fi
+
+    # Make report.values
+    echo $url >> $vls
+
+    timestamp=$(jq -r '.timestamp' "$json")
+    crashed=$(date --date=@$timestamp -u +"%Y-%m-%d %H:%M:%S UTC")
+    echo "Crashed:   $crashed" >> $vls
+
+    process="$(jq -r '.application' "$attrs")"
+    echo "Process:   $process" >> $vls
+    app="$(jq -r '.appName' "$attrs")"
+    [ "$app" != "$process" ] && echo "App.:      $app" >> $vls
+
+    reason="$signal"
+    [ "$reason" = "SIGFPE" ] && reason='SIGFPE (HANG)'
+    echo "Reason:    $reason" >> $vls
+    [ "$error" != "$reason" ] && echo "Error:     $error" >> $vls
+
+    mac="$(jq -r '.mac' "$attrs")"
+    echo "MAC:       $mac" >> $vls
+
+    imagename=$(jq -r '.imagename' "$attrs")
+    echo "Version:   $imagename" >> $vls
+    build_time=$(jq -r '.BUILD_TIME' "$attrs")
+    built=$(echo $build_time | cut -d '"' -f 2)
+    echo "Built:     $built UTC" >> $vls
+
+    # Extract threads
+    stack=$(mktemp --tmpdir rbt-s.XXXXXX)
+    thread=$(mktemp --tmpdir rbt-r.XXXXXX)
+    threads=$(mktemp --tmpdir rbt-t.XXXXXX)
+    jq '.threads' "$json" > "$threads"
+    [ -n "$BTREP_DEBUG" ] && echo "Threads: '$threads'"
+    [ -n "$BTREP_SAVE_THREADS" ] && echo "Save threads as 'saved_threads.json'" && cp "$threads" "saved_threads.json"
+
+    main_thread=$(jq -r '.mainThread' "$json")
+    [ -n "$BTREP_DEBUG" ] && echo "Main thread: $main_thread"
+
+    fault_thread="$(grep -B 1 "\"fault\": true," $threads | head -n 1 | cut -d '"' -f 2)"
+    [ -n "$BTREP_DEBUG" ] && echo "Fault thread: $fault_thread"
+
+    if (( $fault_thread == $main_thread )); then
+        fault_thread_index=0
+    else
+        fault_thread_index="$(grep "^  \"" $threads | grep -B 1000 "^  \"$fault_thread\"" | grep -v "^  \"$main_thread\"" | wc -l)"
+        [ -n "$BTREP_DEBUG" ] && echo "Fault thread index: $fault_thread_index"
+    fi
+
+    # Make report.txt
+    uname_sysname=$(jq -r '.["uname.sysname"]' "$attrs")
+    uname_version=$(jq -r '.["uname.version"]' "$attrs")
+    echo "OS|$uname_sysname|0.0.0 $uname_sysname $uname_version" >> $txt
+
+    uname_machine=$(jq -r '.["uname.machine"]' "$attrs")
+    arch_name=$(jq -r '.arch.name' "$json")
+    cpu_count=$(jq -r '.["cpu.count"]' "$attrs")
+    echo "CPU|$arch_name|$uname_machine|$cpu_count" >> $txt
+
+    fault_address=$(jq -r '.["fault.address"]' "$attrs")
+    echo "Crash|$signal|$fault_address|$fault_thread_index" >> $txt
+
+    # Use $stack for modules[0]
+    jq '.modules[0]' "$json" > "$stack"
+    start="0x$(printf '%08x\n' $(jq -r ".start" "$stack"))"
+    end="0x$(printf '%08x\n' $((start + $(jq -r ".size" "$stack") - 1)))"
+    path=$(jq -r ".path" "$stack")
+    file=$(jq -r ".debug_file" "$stack")
+    id=$(jq -r ".debug_identifier" "$stack")
+    echo "Module|$path||$file|$id|$start|$end|1" >> $txt
+
+    echo >> $txt
+
+parse_thread()
+{
+    index=$1
+    id=$2
+    jq ".[\"$id\"]" "$threads" > "$thread"
+    jq '.stack' "$thread" > "$stack"
+
+    size=$(jq -r ".|length" "$stack")
+    level=-1
+    [ -n "$BTREP_DEBUG_THREADS" ] && echo "thread[$index]: $id, stack[$size]"
+    [ -n "$BTREP_SAVE_EACH_STACK" ] && echo "Save stack as 'saved_stack_$index.json" && cp "$stack" "saved_stack_$index.json"
+    while ((++level < size)); do
+        library=$(jq -r ".[$level].library" "$stack")
+        [ "$library" = 'null' ] && unset library
+        [ -z "$library" ] && unset func_name || func_name=$(jq -r ".[$level].funcName" "$stack")
+        [ "$func_name" = 'null' ] && unset func_name
+        source_code=$(jq -r ".[$level].sourceCode" "$stack")
+        [ -z "$source_code" -o  "$source_code" = 'null' ] && unset path || path=$(jq -r ".sourceCode[\"$source_code\"].path" "$json")
+        [ "$path" = 'null' ] && unset path
+        [ -z "$path" ] && unset line_number || line_number=$(jq -r ".[$level].line" "$stack")
+        [ "$line_number" = 'null' ] && unset line_number
+        echo "$index|$level|$library|$func_name|$path|$line_number|0" >> $txt
+    done
+}
+
+    parse_thread "$fault_thread_index" "$fault_thread"
+    (( fault_thread != main_thread )) && [ -n "$BTREP_PARSE_ALL_THREADS" -o -n "$BTREP_PARSE_MAIN_THREAD" ] && parse_thread 0 "$main_thread"
+
+    # Parse all threads
+    [ -n "$BTREP_PARSE_ALL_THREADS" ] && grep '^  "' "$threads" | grep -o '[0-9]*' | while read thread_id; do
+        (( thread_id == main_thread )) && continue
+        (( ++thread_index ))
+        (( thread_id != fault_thread )) && parse_thread "$thread_index" "$thread_id"
+    done
+
+    rm -f "$threads"
+    rm -f "$thread"
+    rm -f "$stack"
+    rm -f "$attrs"
+fi
+
+################################################################################
+# Download attachments
+[ -n "$BTREP_DEBUG" ] && echo 'Get attachments'
+morgue attachment list rdk -k "$oid" | grep '  id .* name ".*" size .* type ".*"' | while read line; do
+    [ -n "$BTREP_DEBUG" ] && echo $line
+    id=$(echo $line | cut -d ' ' -f 2)
+    name=$(echo $line | cut -d '"' -f 2)
+    file="$name"
+    morgue attachment get rdk -k "$oid" --attachment-id=$id
+done
+
+################################################################################
+# Unpack attachments.zip
+if [ -f attachments.zip ]; then
+    [ -n "$BTREP_DEBUG" ] && echo 'Unpack attachments.zip'
+    unzip -o attachments.zip
+fi
+
+################################################################################
+# Rename long-named files
+for f in *_receiver.log; do [ -f $f ] && mv -- $f _receiver.log; done
+for f in *_messages.txt; do [ -f $f ] && mv -- $f _messages.txt; done
+for f in *_ocapri_log.txt; do [ -f $f ] && mv -- $f _ocapri_log.txt; done
+for f in *_rmfstr_log.txt; do [ -f $f ] && mv -- $f _rmfstr_log.txt; done
+for f in *_applications.log; do [ -f $f ] && mv -- $f _applications.log; done
+for f in *_wpeframework.log; do [ -f $f ] && mv -- $f _wpeframework.log; done
+

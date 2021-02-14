@@ -1,0 +1,3 @@
+#!/bin/bash
+
+morgue login -k https://rdkbacktrace.stb.r53.xcal.tv

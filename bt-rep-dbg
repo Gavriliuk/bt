@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Set environment
+export BTREP_DEBUG=1
+#export BTREP_DEBUG_THREADS=1
+
+#export BTREP_SAVE_ATTRS=1
+#export BTREP_SAVE_THREADS=1
+#export BTREP_SAVE_EACH_STACK=1
+
+#export BTREP_PARSE_MAIN_THREAD=1
+#export BTREP_PARSE_ALL_THREADS=1
+
+bt-rep $@
