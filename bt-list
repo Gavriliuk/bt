@@ -1,0 +1,21 @@
+#!/bin/bash
+
+folder=bt-$(date +%m%d)$foldersuffix
+[ -z "$age" ] && age=7d
+[ -z "$count" ] && count=5
+index=0
+
+morgue list rdk -k \
+--age=$age \
+$([ -n "$fingerprint" ] && echo "--fingerprint=$fingerprint") \
+$([ -n "$classifiers" ] && echo "--filter=classifiers,equal,$classifiers") \
+$([ -n "$callstack" ] && echo "--filter=callstack,contains,$callstack") \
+--filter=_deleted,equal,0 \
+--sort=-timestamp \
+--select=id \
+| grep '22m:' | cut -d ':' -f 2 | cut -d ' ' -f 2 | while read oid; do
+    [ -d $folder/$oid ] && echo "Skip $oid" && continue
+    echo "$((++index)). Get id $oid"
+    bt-rep $oid $folder
+    [ $index -lt $count ] || break
+done

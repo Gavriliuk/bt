@@ -1,0 +1,12 @@
+#!/bin/bash
+
+#age=30d
+count=3
+callstack='createDocument'
+#fingerprint='c501b045f45828e06ebceccfffc106de8a29088b753ef5f43635aac4151e680f'
+
+for classifiers in bus fpe segv user-defined-signal; do
+    echo "classifiers: $classifiers"
+    foldersuffix="-${classifiers%%-*}"
+    . bt-list
+done
