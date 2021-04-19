@@ -1,6 +1,8 @@
 #!/bin/bash
 
-folder=bt-$(date +%m%d)$foldersuffix
+[ -z "$fingerprint" -a -n "$1" ] && fingerprint="$1"
+
+[ -n "$2" ] && folder="$2" || folder="bt-$(date +%m%d)$foldersuffix"
 [ -z "$age" ] && age=7d
 [ -z "$count" ] && count=5
 index=0
@@ -8,7 +10,9 @@ index=0
 morgue list rdk -k \
 --age=$age \
 $([ -n "$fingerprint" ] && echo "--fingerprint=$fingerprint") \
+$([ -n "$mac" ] && echo "--filter=mac,equal,$mac") \
 $([ -n "$classifiers" ] && echo "--filter=classifiers,equal,$classifiers") \
+$([ -n "$stackregex" ] && echo "--filter=callstack,regex,$stackregex") \
 $([ -n "$callstack" ] && echo "--filter=callstack,contains,$callstack") \
 --filter=_deleted,equal,0 \
 --sort=-timestamp \

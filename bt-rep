@@ -83,6 +83,9 @@
 [ -z "$1" ] && echo "Error: object Id is not specified" && exit
 oid="$1"
 
+url1='https://rdkbacktrace.stb.r53.xcal.tv/p/rdk/debug?time=all&error='$oid
+echo $url1
+
 ################################################################################
 # Go to work directory
 unset dir
@@ -114,8 +117,9 @@ else
     [ -n "$dir" ] && rmdir "$dir"
     exit
 fi
-url="https://rdkbacktrace.stb.r53.xcal.tv/p/rdk/debug?time=month&fingerprint=$fingerprint&debug=(%22$oid%22,0,0)"
-echo $url
+
+url2='https://rdkbacktrace.stb.r53.xcal.tv/p/rdk/triage?fingerprint='$fingerprint
+echo $url2
 
 ################################################################################
 # Download JSON
@@ -150,7 +154,8 @@ if [ -f "$json" ]; then
     fi
 
     # Make report.values
-    echo $url >> $vls
+    echo $url1 >> $vls
+    echo $url2 >> $vls
 
     timestamp=$(jq -r '.timestamp' "$json")
     crashed=$(date --date=@$timestamp -u +"%Y-%m-%d %H:%M:%S UTC")
