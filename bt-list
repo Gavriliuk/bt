@@ -15,6 +15,7 @@ $([ -n "$classifiers" ] && echo "--filter=classifiers,equal,$classifiers") \
 $([ -n "$stacktop" ] && echo "--filter=callstack,regular-expression,^..........\"$stacktop\"") \
 $([ -n "$stackregex" ] && echo "--filter=callstack,regular-expression,$stackregex") \
 $([ -n "$callstack" ] && echo "--filter=callstack,contains,$callstack") \
+--filter=isMinidump,equal,1 \
 --filter=_deleted,equal,0 \
 --sort=-timestamp \
 --select=id \

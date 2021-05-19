@@ -5,4 +5,6 @@ if [ -z "%1" ]; then
     exit
 fi
 
-. bt-list "$1" "fin-${1:0:7}"
+export BTREP_PARSE_ALL_THREADS=1
+export age=30d
+. bt-list "$1" "fpm-${1:0:7}"
