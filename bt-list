@@ -12,7 +12,8 @@ morgue list rdk -k \
 $([ -n "$fingerprint" ] && echo "--fingerprint=$fingerprint") \
 $([ -n "$mac" ] && echo "--filter=mac,equal,$mac") \
 $([ -n "$classifiers" ] && echo "--filter=classifiers,equal,$classifiers") \
-$([ -n "$stackregex" ] && echo "--filter=callstack,regex,$stackregex") \
+$([ -n "$stacktop" ] && echo "--filter=callstack,regular-expression,^..........\"$stacktop\"") \
+$([ -n "$stackregex" ] && echo "--filter=callstack,regular-expression,$stackregex") \
 $([ -n "$callstack" ] && echo "--filter=callstack,contains,$callstack") \
 --filter=_deleted,equal,0 \
 --sort=-timestamp \
