@@ -11,6 +11,9 @@ morgue list rdk -k \
 --age=$age \
 $([ -n "$fingerprint" ] && echo "--fingerprint=$fingerprint") \
 $([ -n "$mac" ] && echo "--filter=mac,equal,$mac") \
+$([ -n "$ver" ] && echo "--filter=VERSION,equal,$ver") \
+$([ -n "$model" ] && echo "--filter=model,equal,$model") \
+$([ -n "$image" ] && echo "--filter=imagename,equal,$image") \
 $([ -n "$classifiers" ] && echo "--filter=classifiers,equal,$classifiers") \
 $([ -n "$stacktop" ] && echo "--filter=callstack,regular-expression,^..........\"$stacktop\"") \
 $([ -n "$stackregex" ] && echo "--filter=callstack,regular-expression,$stackregex") \

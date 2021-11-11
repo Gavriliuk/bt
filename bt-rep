@@ -79,6 +79,22 @@
 [ -n "$BTREP_DEBUG" ] && echo 'Debug mode'
 
 ################################################################################
+# Workaround for manually downloaded crashreports
+# 1. No parameters should be provided
+# 2. The current directory should by $oid
+# 3. Files ${oid}.json and attachments.zip should exist in the current directory
+if [ -z "$1" ] && ls $(basename "$PWD").json && ls attachments.zip; then
+    oid=$(basename "$PWD")
+    mv $oid.json report.json
+    touch morgue
+    chmod 777 morgue
+    export PATH=".:$PATH"
+    $0 $oid
+    rm morgue
+    exit
+fi
+
+################################################################################
 # Set oid (object Id)
 [ -z "$1" ] && echo "Error: object Id is not specified" && exit
 oid="$1"
@@ -118,7 +134,7 @@ else
     exit
 fi
 
-url2='https://rdkbacktrace.stb.r53.xcal.tv/p/rdk/triage?fingerprint='$fingerprint
+url2='https://rdkbacktrace.stb.r53.xcal.tv/p/rdk/triage?time=month&fingerprint='$fingerprint
 echo $url2
 
 ################################################################################
