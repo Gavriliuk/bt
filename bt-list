@@ -12,6 +12,8 @@ morgue list rdk -k \
 $([ -n "$fingerprint" ] && echo "--fingerprint=$fingerprint") \
 $([ -n "$mac" ] && echo "--filter=mac,equal,$mac") \
 $([ -n "$ver" ] && echo "--filter=VERSION,equal,$ver") \
+$([ -n "$app" ] && echo "--filter=appName,equal,$app") \
+$([ -n "$pro" ] && echo "--filter=application,equal,$pro") \
 $([ -n "$model" ] && echo "--filter=model,equal,$model") \
 $([ -n "$image" ] && echo "--filter=imagename,equal,$image") \
 $([ -n "$classifiers" ] && echo "--filter=classifiers,equal,$classifiers") \
