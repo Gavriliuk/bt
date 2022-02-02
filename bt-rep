@@ -183,9 +183,9 @@ if [ -f "$json" ]; then
     [ "$app" != "$process" ] && echo "App.:      $app" >> $vls
 
     reason="$signal"
-    [ "$reason" = "SIGFPE" ] && reason='SIGFPE (HANG)'
-    echo "Reason:    $reason" >> $vls
-    [ "$error" != "$reason" ] && echo "Error:     $error" >> $vls
+    [ "$signal" = "SIGFPE" ] && reason='SIGFPE (HANG)'
+    [ "$signal" != "SIGSEGV" ] && echo "Reason:    $reason" >> $vls
+    [ "$signal" != "SIGFPE" ] && [ "$error" != "$reason" ] && echo "Error:     $error" >> $vls
 
     mac="$(jq -r '.mac' "$attrs")"
     echo "MAC:       $mac" >> $vls
